@@ -6,7 +6,7 @@ import '../constants/colors.dart';
 import '../widgets/todo_item.dart';
 
 class Home extends StatefulWidget {
-  const Home({Key? key}) : super(key: key);
+  const Home({super.key});
 
   @override
   State<Home> createState() => _HomeState();
@@ -15,19 +15,29 @@ class Home extends StatefulWidget {
 class _HomeState extends State<Home> {
   final todosList = Todo.todoList();
   String _filter = 'all'; // 'completed', 'not_completed', or 'all'
+  String _searchQuery = "";
   bool _isSearching = false;
   final FocusNode _searchFocus = FocusNode();
 
   List<Todo> get _filteredTodoList {
+    Iterable<Todo> filtered = todosList;
     switch (_filter) {
       case 'completed':
-        return todosList.where((todo) => todo.isDone).toList();
+        filtered = filtered.where((todo) => todo.isDone);
+        break;
       case 'not_completed':
-        return todosList.where((todo) => !todo.isDone).toList();
-      case 'all':
-      default:
-        return todosList;
+        filtered = filtered.where((todo) => !todo.isDone);
+        break;
     }
+
+    if (_searchQuery.isNotEmpty) {
+      filtered = filtered.where(
+        (todo) =>
+            todo.todoText.toLowerCase().contains(_searchQuery.toLowerCase()),
+      );
+    }
+
+    return filtered.toList();
   }
 
   void _toggleTodoStatus(Todo todo) {
@@ -107,7 +117,7 @@ class _HomeState extends State<Home> {
                     groupValue: _filter,
                     onChanged: (value) {
                       setState(() => _filter = value!);
-                      this.setState(() {});
+                      this.setState(() {}); // Update the main UI
                       Navigator.pop(context);
                     },
                   ),
@@ -117,7 +127,7 @@ class _HomeState extends State<Home> {
                     groupValue: _filter,
                     onChanged: (value) {
                       setState(() => _filter = value!);
-                      this.setState(() {});
+                      this.setState(() {}); // Update the main UI
                       Navigator.pop(context);
                     },
                   ),
@@ -130,14 +140,70 @@ class _HomeState extends State<Home> {
     );
   }
 
+  void _showAddTodoDialog() {
+    final TextEditingController todoController = TextEditingController();
+
+    showDialog(
+      context: context,
+      fullscreenDialog: true,
+      barrierDismissible: true, // user must tap buttons
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Text("Add a new ToDo"),
+          content: TextField(
+            controller: todoController,
+            autofocus: true,
+            decoration: const InputDecoration(
+              hintText: "Enter your task here...",
+              border: OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel"),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: tdBlue,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              onPressed: () {
+                final text = todoController.text.trim();
+                if (text.isNotEmpty) {
+                  setState(() {
+                    todosList.insert(
+                      0,
+                      Todo(
+                        id: DateTime.now().millisecondsSinceEpoch.toString(),
+                        todoText: text,
+                      ),
+                    );
+                  });
+                }
+                Navigator.pop(context); // close dialog
+              },
+              child: const Text("Add", style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   void initState() {
     super.initState();
-    _searchFocus.addListener(() {
-      setState(() {
-        _isSearching = _searchFocus.hasFocus;
-      });
-    });
+    // _searchFocus.addListener(() {
+    //   setState(() {
+    //     _isSearching = _searchFocus.hasFocus;
+    //   });
+    // });
   }
 
   @override
@@ -146,10 +212,14 @@ class _HomeState extends State<Home> {
       backgroundColor: tdBGColor,
       appBar: _bluidAppBar(),
       body: GestureDetector(
+        // onTap: () {
+        //   FocusScope.of(context).unfocus(); // <- unfocus on outside tap
+        // },
         onTap: () {
-          FocusScope.of(context).unfocus(); // <- unfocus on outside tap
+          FocusScope.of(context).unfocus(); // remove keyboard
+          setState(() => _isSearching = false); // reset only here
         },
-        child: _todoList(todosList),
+        child: _todoList(_filteredTodoList),
       ),
       bottomNavigationBar: SafeArea(
         child: Container(
@@ -160,7 +230,7 @@ class _HomeState extends State<Home> {
             borderRadius: BorderRadius.circular(20),
           ),
           child: ElevatedButton(
-            onPressed: () {},
+            onPressed: _showAddTodoDialog,
             style: ElevatedButton.styleFrom(
               backgroundColor: tdBlue,
               shape: RoundedRectangleBorder(
@@ -245,19 +315,26 @@ class _HomeState extends State<Home> {
 
   Widget searchBox() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10), // 10px padding
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: AnimatedContainer(
-          duration: Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-          height: 50,
-          width: double.infinity, // full width inside padding
-          decoration: BoxDecoration(color: Colors.white),
-          child: Stack(
-            children: [
-              TextField(
+      padding: const EdgeInsets.symmetric(horizontal: 0),
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
+              height: 50,
+              padding: EdgeInsets.symmetric(horizontal: 10),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: TextField(
+                autofocus: false,
                 focusNode: _searchFocus,
+                onTap: () {
+                  setState(() => _isSearching = true);
+                },
+                onChanged: (value) {
+                  setState(() => _searchQuery = value);
+                },
                 decoration: InputDecoration(
                   contentPadding: EdgeInsets.all(0),
                   prefixIcon: Icon(Icons.search, color: tdBlack, size: 20),
@@ -270,29 +347,39 @@ class _HomeState extends State<Home> {
                   hintStyle: TextStyle(color: tdGrey),
                 ),
               ),
-              // Filter icon on the right
-              AnimatedPositioned(
-                duration: Duration(milliseconds: 300),
-                right: _isSearching ? -60 : 0, // slide out when focused
-                top: 0,
-                bottom: 0,
-                child: AnimatedOpacity(
-                  duration: Duration(milliseconds: 300),
-                  opacity: _isSearching ? 0 : 1,
-                  child: GestureDetector(
+            ),
+          ),
+
+          SizedBox(width: 10),
+
+          // Filter button that animates in/out
+          AnimatedSwitcher(
+            duration: Duration(milliseconds: 300),
+            transitionBuilder: (child, animation) => FadeTransition(
+              opacity: animation,
+              child: SizeTransition(
+                sizeFactor: animation,
+                axis: Axis.horizontal,
+                child: child,
+              ),
+            ),
+            child: _isSearching
+                ? SizedBox.shrink()
+                : GestureDetector(
+                    key: ValueKey("filter"),
                     onTap: _showFilterModal,
                     child: Container(
                       width: 50,
                       height: 50,
-                      color: tdBlue,
+                      decoration: BoxDecoration(
+                        color: tdBlue,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
                       child: Icon(Icons.filter_list, color: Colors.white),
                     ),
                   ),
-                ),
-              ),
-            ],
           ),
-        ),
+        ],
       ),
     );
   }
